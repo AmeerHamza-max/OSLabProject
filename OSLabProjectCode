@@ -1,0 +1,225 @@
+
+import tkinter as tk  # Import the tkinter module for GUI
+from tkinter import messagebox  # Import messagebox from tkinter for displaying messages
+from tkinter import ttk  # Import ttk from tkinter for themed widgets
+
+class Process:
+    def __init__(self, pid, arrival, burst, priority):
+        self.pid = pid  # Process ID
+        self.arrival = arrival  # Arrival time of the process
+        self.burst = burst  # Burst time of the process
+        self.priority = priority  # Priority of the process
+        self.waiting = 0  # Waiting time of the process
+        self.turnaround = 0  # Turnaround time of the process
+        self.remaining_burst = burst  # Remaining burst time of the process
+
+class ProcessSchedulerApp:
+    def __init__(self, root):
+        self.root = root  # Root window for the application
+        self.root.title("Process Scheduler Simulator")  # Set the title of the window
+
+        self.processes = []  # List to store all processes
+        self.scheduled_processes = []  # List to store scheduled processes
+        self.avg_waiting_time = 0.0  # Average waiting time of all processes
+        self.avg_turnaround_time = 0.0  # Average turnaround time of all processes
+
+        # Labels and Entry widgets for Arrival Time, Burst Time, and Priority
+        self.label_arrival = tk.Label(root, text="Arrival Time:")
+        self.label_arrival.grid(row=0, column=0, padx=10, pady=5)
+        self.entry_arrival = tk.Entry(root)
+        self.entry_arrival.grid(row=0, column=1, padx=10, pady=5)
+
+        self.label_burst = tk.Label(root, text="Burst Time:")
+        self.label_burst.grid(row=1, column=0, padx=10, pady=5)
+        self.entry_burst = tk.Entry(root)
+        self.entry_burst.grid(row=1, column=1, padx=10, pady=5)
+
+        self.label_priority = tk.Label(root, text="Priority:")
+        self.label_priority.grid(row=2, column=0, padx=10, pady=5)
+        self.entry_priority = tk.Entry(root)
+        self.entry_priority.grid(row=2, column=1, padx=10, pady=5)
+
+        # Button to add a process
+        self.btn_add_process = tk.Button(root, text="Add Process", command=self.add_process)
+        self.btn_add_process.grid(row=3, column=0, columnspan=2, padx=10, pady=10)
+
+        # Label and Combobox for selecting scheduling algorithm
+        self.label_algorithm = tk.Label(root, text="Select Algorithm:")
+        self.label_algorithm.grid(row=4, column=0, columnspan=2, padx=10, pady=5)
+
+        self.combo_algorithm = ttk.Combobox(root, values=["FCFS", "SJF", "Round Robin", "Priority"])
+        self.combo_algorithm.grid(row=5, column=0, columnspan=2, padx=10, pady=5)
+        self.combo_algorithm.current(0)  # Set default selection
+        self.combo_algorithm.bind("<<ComboboxSelected>>", self.toggle_priority_and_quantum_entry)  # Bind event
+
+        # Button to run the scheduler
+        self.btn_schedule = tk.Button(root, text="Run Scheduler", command=self.run_scheduler)
+        self.btn_schedule.grid(row=6, column=0, columnspan=2, padx=10, pady=10)
+
+        # Treeview to display process details
+        self.tree = ttk.Treeview(root, columns=("PID", "Arrival", "Burst", "Priority", "Waiting", "Turnaround"), show='headings')
+        self.tree.heading("PID", text="Process ID")
+        self.tree.heading("Arrival", text="Arrival Time")
+        self.tree.heading("Burst", text="Burst Time")
+        self.tree.heading("Priority", text="Priority")
+        self.tree.heading("Waiting", text="Waiting Time")
+        self.tree.heading("Turnaround", text="Turnaround Time")
+
+        # Set column widths
+        self.tree.column("PID", width=80)
+        self.tree.column("Arrival", width=100)
+        self.tree.column("Burst", width=100)
+        self.tree.column("Priority", width=100)
+        self.tree.column("Waiting", width=100)
+        self.tree.column("Turnaround", width=120)
+
+        self.tree.grid(row=7, column=0, columnspan=2, padx=10, pady=10)
+
+        # Text widget for displaying average times
+        self.text_output = tk.Text(root, width=80, height=5, wrap=tk.WORD)
+        self.text_output.grid(row=8, column=0, columnspan=2, padx=10, pady=10)
+
+        # Label and Entry widget for Time Quantum (used in Round Robin)
+        self.label_quantum = tk.Label(root, text="Time Quantum:")
+        self.entry_quantum = tk.Entry(root)
+
+        self.toggle_priority_and_quantum_entry()  # Toggle visibility of priority and quantum entry widgets
+
+    def toggle_priority_and_quantum_entry(self, event=None):
+        # Toggle Priority entry based on selected algorithm
+        algorithm = self.combo_algorithm.get()
+        if algorithm == "Priority":
+            self.entry_priority.config(state=tk.NORMAL)
+        else:
+            self.entry_priority.config(state=tk.DISABLED)
+            self.entry_priority.delete(0, tk.END)
+
+        # Toggle Quantum entry based on selected algorithm
+        if algorithm == "Round Robin":
+            self.label_quantum.grid(row=9, column=0, padx=10, pady=5)
+            self.entry_quantum.grid(row=9, column=1, padx=10, pady=5)
+        else:
+            self.label_quantum.grid_forget()
+            self.entry_quantum.grid_forget()
+
+    def add_process(self):
+        # Function to add a process to the list
+        arrival = self.entry_arrival.get()
+        burst = self.entry_burst.get()
+        priority = self.entry_priority.get() if self.combo_algorithm.get() == "Priority" else "0"
+
+        # Validate input
+        if not arrival.isdigit() or not burst.isdigit() or not priority.isdigit():
+            messagebox.showerror("Error", "Please enter valid numeric values.")
+            return
+
+        # Create a new Process object and append to processes list
+        pid = len(self.processes) + 1
+        process = Process(pid, int(arrival), int(burst), int(priority))
+        self.processes.append(process)
+
+        # Display process details in the output text widget
+        self.text_output.insert(tk.END, f"Process {pid}: Arrival={arrival}, Burst={burst}, Priority={priority}\n")
+
+        # Clear input fields
+        self.entry_arrival.delete(0, tk.END)
+        self.entry_burst.delete(0, tk.END)
+        self.entry_priority.delete(0, tk.END)
+
+    def run_scheduler(self):
+        # Function to run the selected scheduling algorithm
+        algorithm = self.combo_algorithm.get()
+
+        # Select scheduler based on algorithm
+        if algorithm == "FCFS":
+            self.fcfs_scheduler()
+        elif algorithm == "SJF":
+            self.sjf_scheduler()
+        elif algorithm == "Round Robin":
+            self.round_robin_scheduler()
+        elif algorithm == "Priority":
+            self.priority_scheduler()
+        else:
+            messagebox.showerror("Error", "Invalid algorithm selection.")
+            return
+
+        # Display results in the Treeview and output text widget
+        self.display_results()
+
+    def fcfs_scheduler(self):
+        # First Come First Serve (FCFS) scheduling algorithm
+        self.scheduled_processes = sorted(self.processes, key=lambda x: x.arrival)
+        self.calculate_waiting_turnaround()
+
+    def sjf_scheduler(self):
+        # Shortest Job First (SJF) scheduling algorithm
+        self.scheduled_processes = sorted(self.processes, key=lambda x: x.burst)
+        self.calculate_waiting_turnaround()
+
+    def round_robin_scheduler(self):
+        # Round Robin scheduling algorithm
+        quantum = self.entry_quantum.get()
+        if not quantum.isdigit():
+            messagebox.showerror("Error", "Please enter a valid numeric value for Time Quantum.")
+            return
+        quantum = int(quantum)
+
+        time = 0
+        queue = self.processes[:]
+
+        while queue:
+            process = queue.pop(0)
+
+            if process.remaining_burst > quantum:
+                time += quantum
+                process.remaining_burst -= quantum
+                queue.append(process)
+            else:
+                time += process.remaining_burst
+                process.remaining_burst = 0
+                process.waiting = time - process.arrival - process.burst
+                process.turnaround = time - process.arrival
+                self.scheduled_processes.append(process)
+
+        self.calculate_average_times()
+
+    def priority_scheduler(self):
+        # Priority scheduling algorithm
+        self.scheduled_processes = sorted(self.processes, key=lambda x: x.priority)
+        self.calculate_waiting_turnaround()
+
+    def calculate_waiting_turnaround(self):
+        # Calculate waiting and turnaround times for scheduled processes
+        total_waiting_time = 0
+        total_turnaround_time = 0
+
+        for i in range(len(self.scheduled_processes)):
+            if i == 0:
+                self.scheduled_processes[i].waiting = 0
+            else:
+                self.scheduled_processes[i].waiting = self.scheduled_processes[i-1].burst + self.scheduled_processes[i-1].waiting - self.scheduled_processes[i].arrival
+
+            self.scheduled_processes[i].turnaround = self.scheduled_processes[i].waiting + self.scheduled_processes[i].burst
+
+            total_waiting_time += self.scheduled_processes[i].waiting
+
+        self.calculate_average_times()
+
+    def calculate_average_times(self):
+        total_waiting_time = sum([p.waiting for p in self.scheduled_processes])
+        total_turnaround_time = sum([p.turnaround for p in self.scheduled_processes])
+        self.avg_waiting_time = total_waiting_time / len(self.scheduled_processes)
+        self.avg_turnaround_time = total_turnaround_time / len(self.scheduled_processes)
+
+        self.text_output.insert(tk.END, f"\nAverage Waiting Time: {self.avg_waiting_time}\n")
+        self.text_output.insert(tk.END, f"Average Turnaround Time: {self.avg_turnaround_time}\n")
+
+    def display_results(self):
+        # Display the results in the Treeview widget
+        for process in self.scheduled_processes:
+            self.tree.insert("", "end", values=(process.pid, process.arrival, process.burst, process.priority, process.waiting, process.turnaround))
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = ProcessSchedulerApp(root)
+    root.mainloop()
